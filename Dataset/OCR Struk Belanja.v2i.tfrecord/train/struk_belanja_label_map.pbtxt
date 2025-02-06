@@ -1,0 +1,20 @@
+item {
+    name: "info_toko",
+    id: 1,
+    display_name: "info_toko"
+}
+item {
+    name: "item_belanja",
+    id: 2,
+    display_name: "item_belanja"
+}
+item {
+    name: "struk_belanja",
+    id: 3,
+    display_name: "struk_belanja"
+}
+item {
+    name: "total",
+    id: 4,
+    display_name: "total"
+}
