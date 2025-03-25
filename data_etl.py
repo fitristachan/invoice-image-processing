@@ -36,5 +36,4 @@ class DatasetReceipt:
 
         image = cv2.resize(image, (600, 600)) / 255.0
         image = self.augment(image=image)['image']
-        return image
-        # return np.expand_dims(image, axis=0).astype(np.float32)
+        return np.expand_dims(image, axis=0).astype(np.float32)
