@@ -51,21 +51,28 @@ class DatasetReceipt:
     def extract_receipt_data(self, ground_truth):
         """Convert JSON labels into a DataFrame of menu items and total price."""
         menu_items = []
+        total_price = 0.0
         
+        # Ensure ground_truth is a dictionary
+        if isinstance(ground_truth, str):
+            try:
+                ground_truth = json.loads(ground_truth)
+            except json.JSONDecodeError:
+                ground_truth = {}
+
         # Extract menu items if they exist
-        if "gt_parse" in ground_truth and "menu" in ground_truth["gt_parse"]:
+        if ground_truth.get("gt_parse", {}).get("menu"):
             for item in ground_truth["gt_parse"]["menu"]:
+                # Safely get values with defaults
                 menu_items.append({
                     "item_name": item.get("nm", ""),
                     "quantity": item.get("cnt", ""),
-                    "price": float(item.get("price", "0").replace(",", ""))
+                    "price": float(str(item.get("price", "0")).replace(",", ""))
                 })
         
         # Extract total price if it exists
-        total_price = 0.0
-        if "gt_parse" in ground_truth and "total" in ground_truth["gt_parse"]:
-            total_price = float(
-                ground_truth["gt_parse"]["total"].get("total_price", "0").replace(",", "")
-            )
+        if ground_truth.get("gt_parse", {}).get("total"):
+            total_str = str(ground_truth["gt_parse"]["total"].get("total_price", "0"))
+            total_price = float(total_str.replace(",", ""))
         
         return pd.DataFrame(menu_items), total_price
