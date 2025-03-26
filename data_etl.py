@@ -43,7 +43,7 @@ class DatasetReceipt:
                     menu_items.append({
                         "item_name": str(item.get("nm", "")),
                         "quantity": str(item.get("cnt", "")),
-                        "price": float(str(item.get("price", "0")).replace(",", ""))
+                        "price": float(item.get("price", "0"))
                     })
                 except (ValueError, AttributeError):
                     continue
