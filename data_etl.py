@@ -26,6 +26,15 @@ class DatasetReceipt:
             except json.JSONDecodeError:
                 return {}
         return ground_truth or {}
+    
+    def preprocess_image(self, image):
+        """Resize, normalize, and augment image."""
+        if isinstance(image, Image.Image):
+            image = np.array(image)
+        
+        image = cv2.resize(image, (600, 600)) / 255.0
+        image = self.augment(image=image)['image']
+        return np.expand_dims(image, axis=0).astype(np.float32)
 
     def extract_receipt_data(self, ground_truth):
         """Robust extraction of menu items and totals"""
