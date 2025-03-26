@@ -21,15 +21,21 @@ class DatasetReceipt:
     def __getitem__(self, idx):
         sample = self.dataset[idx]
         image = self.preprocess_image(sample["image"])
-        ground_truth = self.parse_ground_truth(sample["ground_truth"])
         
-        # Extract menu items and total price
+        # Handle ground truth parsing
+        ground_truth = sample.get("ground_truth", "{}")
+        if isinstance(ground_truth, str):
+            try:
+                ground_truth = json.loads(ground_truth)
+            except json.JSONDecodeError:
+                ground_truth = {}
+
         menu_df, total_price = self.extract_receipt_data(ground_truth)
         
         return {
             "image": image,
-            "menu_df": menu_df,      # DataFrame with columns: ['item_name', 'quantity', 'price']
-            "total_price": total_price  # Float (e.g., 1591600.0)
+            "menu_df": menu_df,
+            "total_price": total_price
         }
 
     def preprocess_image(self, image):
