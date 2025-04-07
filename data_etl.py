@@ -155,7 +155,7 @@ class DatasetReceipt:
 
         if not menu_df.empty:
             # Standardize column names
-            menu_df.columns = menu_df.columns.str.lower().str.replace(r'[^a-z0-9]', '')
+            menu_df.columns = menu_df.columns.str.lower()
             
             # Find columns with fallbacks
             name_col = self._find_item_name_column(menu_df) or 'item_name'
