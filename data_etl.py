@@ -124,60 +124,62 @@ class DatasetReceipt:
         menu_items = []
         total_price = 0.0
 
-        # Safely extract menu data
+        # Helper functions for robust parsing
+        def parse_quantity(qty_str):
+            """Handle various quantity formats (1X, 3pcs, etc.)"""
+            if not isinstance(qty_str, str):
+                return float(qty_str) if pd.notna(qty_str) else 1.0
+                
+            # Remove non-numeric characters
+            cleaned = ''.join(c for c in qty_str if c.isdigit() or c == '.')
+            return float(cleaned) if cleaned else 1.0
+
+        def parse_price(price_str):
+            """Handle various price formats (@22.000, 38,835, etc.)"""
+            if not isinstance(price_str, str):
+                return float(price_str) if pd.notna(price_str) else 0.0
+                
+            # Remove currency symbols, thousands separators
+            cleaned = price_str.replace('@', '').replace(',', '').strip()
+            
+            # Fix multiple decimal points (take last)
+            if cleaned.count('.') > 1:
+                parts = cleaned.split('.')
+                cleaned = f"{''.join(parts[:-1])}.{parts[-1]}"
+                
+            return float(cleaned) if cleaned else 0.0
+
+        # Process menu data
         menu = parsed.get("gt_parse", {}).get("menu", [])
-        
-        # Handle different menu formats
-        if isinstance(menu, list):
-            # Case 1: List of proper item dictionaries
-            if menu and all(isinstance(item, dict) for item in menu):
-                menu_df = pd.DataFrame(menu)
-            # Case 2: List of scalar values (unstructured data)
-            else:
-                menu_df = pd.DataFrame({'raw_items': menu})
-        # Case 3: Single dictionary or other format
-        elif isinstance(menu, dict):
-            menu_df = pd.DataFrame([menu])
-        # Case 4: Empty or invalid data
-        else:
-            menu_df = pd.DataFrame(columns=['item_name', 'quantity', 'price'])
-        
-        # Process valid menu data
+        menu_df = pd.DataFrame(menu) if menu and isinstance(menu, list) else pd.DataFrame()
+
         if not menu_df.empty:
-            # Clean column names (remove special characters, lowercase)
+            # Standardize column names
             menu_df.columns = menu_df.columns.str.lower().str.replace(r'[^a-z0-9]', '')
             
-            # Find relevant columns with fallbacks
+            # Find columns with fallbacks
             name_col = self._find_item_name_column(menu_df) or 'item_name'
             qty_col = self._find_quantity_column(menu_df) or 'quantity'
             price_col = self._find_price_column(menu_df) or 'price'
-            
-            # Add missing columns with defaults
-            if name_col not in menu_df.columns:
-                menu_df[name_col] = ""
-            if qty_col not in menu_df.columns:
-                menu_df[qty_col] = 1
-            if price_col not in menu_df.columns:
-                menu_df[price_col] = 0.0
-            
-            # Convert to standardized format
+
+            # Process each item
             for _, item in menu_df.iterrows():
                 try:
                     menu_items.append({
-                        "item_name": str(item[name_col]),
-                        "quantity": float(str(item[qty_col]).strip() or 1),
-                        "price": float(str(item[price_col]).replace(",", "").strip() or 0)
+                        "item_name": str(item.get(name_col, "")),
+                        "quantity": parse_quantity(item.get(qty_col, 1)),
+                        "price": parse_price(item.get(price_col, 0))
                     })
-                except (ValueError, AttributeError) as e:
-                    print(f"Error processing menu item: {e}")
+                except Exception as e:
+                    print(f"Skipping malformed item: {item.to_dict()} - Error: {str(e)}")
                     continue
 
-        # Safely extract total price
+        # Process total price
         try:
             total_str = str(parsed.get("gt_parse", {}).get("total", {}).get("total_price", "0"))
-            total_price = float(total_str.replace(",", "").strip())
-        except (ValueError, AttributeError) as e:
-            print(f"Error processing total price: {e}")
+            total_price = parse_price(total_str)
+        except Exception as e:
+            print(f"Error processing total price: {str(e)}")
             total_price = 0.0
 
         return pd.DataFrame(menu_items), total_price
