@@ -121,38 +121,30 @@ class DatasetReceipt:
         return np.expand_dims(image, axis=0).astype(np.float32)
 
     def clean_numeric_string(self, value):
-        """Robust cleaning of numeric strings with various formats"""
+        """Fix format and clean up messy currency/numeric strings"""
         if pd.isna(value):
-            return 0.0
-
+            raise ValueError("Value is NaN")
+        
         if isinstance(value, (int, float)):
             return float(value)
 
+        # Convert to string and clean currency symbols, spaces
         str_value = str(value).strip()
+        str_value = str_value.replace("Rp", "").replace("rp", "").replace(" ", "").replace(",", ".")
 
-        # Remove currency symbols (e.g., Rp, $, etc.)
-        str_value = re.sub(r"[^\d,.\sx]", "", str_value)
+        # Keep only digits and decimal point
+        cleaned = re.sub(r"[^0-9.]", "", str_value)
 
-        # Handle multiplication like '210.00 x'
-        if 'x' in str_value:
-            str_value = str_value.split('x')[0].strip()
-
-        # Replace comma with dot if it's used as decimal
-        if ',' in str_value and '.' not in str_value:
-            str_value = str_value.replace(',', '.')
-
-        # Remove thousand separators (e.g., 49.000.00 → 49000.00)
-        parts = re.split(r'[.,]', str_value)
-        if len(parts) > 2:
-            cleaned = ''.join(parts[:-1]) + '.' + parts[-1]
-        else:
-            cleaned = str_value
+        # If more than one dot, try to fix thousand separator like '9.50000'
+        if cleaned.count(".") > 1:
+            parts = cleaned.split(".")
+            # Join all except last as integer part
+            cleaned = "".join(parts[:-1]) + "." + parts[-1]
 
         try:
             return float(cleaned)
-        except ValueError:
-            raise ValueError(f"Failed to parse numeric string: '{value}' → '{cleaned}'")
-
+        except ValueError as e:
+            raise ValueError(f"Could not convert cleaned string to float: original='{value}', cleaned='{cleaned}'")
 
     def extract_receipt_data(self, ground_truth):
         parsed = self.parse_ground_truth(ground_truth)
