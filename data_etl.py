@@ -124,33 +124,35 @@ class DatasetReceipt:
         """Robust cleaning of numeric strings with various formats"""
         if pd.isna(value):
             return 0.0
-            
+
         if isinstance(value, (int, float)):
             return float(value)
-            
-        # Convert to string if not already
+
         str_value = str(value).strip()
-        
-        # Handle cases like '210.00 x' by splitting and taking first part
+
+        # Remove currency symbols (e.g., Rp, $, etc.)
+        str_value = re.sub(r"[^\d,.\sx]", "", str_value)
+
+        # Handle multiplication like '210.00 x'
         if 'x' in str_value:
             str_value = str_value.split('x')[0].strip()
-        
-        # Remove all non-numeric characters except decimal point
-        cleaned = re.sub(r"[^\d.]", "", str_value)
-        
-        # Handle empty string after cleaning
-        if not cleaned:
-            return 0.0
-            
-        # Handle multiple decimal points
-        if cleaned.count('.') > 1:
-            parts = cleaned.split('.')
-            cleaned = f"{''.join(parts[:-1])}.{parts[-1]}"
-            
+
+        # Replace comma with dot if it's used as decimal
+        if ',' in str_value and '.' not in str_value:
+            str_value = str_value.replace(',', '.')
+
+        # Remove thousand separators (e.g., 49.000.00 → 49000.00)
+        parts = re.split(r'[.,]', str_value)
+        if len(parts) > 2:
+            cleaned = ''.join(parts[:-1]) + '.' + parts[-1]
+        else:
+            cleaned = str_value
+
         try:
             return float(cleaned)
         except ValueError:
-            return 0.0
+            raise ValueError(f"Failed to parse numeric string: '{value}' → '{cleaned}'")
+
 
     def extract_receipt_data(self, ground_truth):
         parsed = self.parse_ground_truth(ground_truth)
