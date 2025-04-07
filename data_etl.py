@@ -120,32 +120,6 @@ class DatasetReceipt:
         image = self.augment(image=image)['image']
         return np.expand_dims(image, axis=0).astype(np.float32)
 
-    def clean_numeric_string(self, value):
-        """Fix format and clean up messy currency/numeric strings"""
-        if pd.isna(value):
-            raise ValueError("Value is NaN")
-        
-        if isinstance(value, (int, float)):
-            return float(value)
-
-        # Convert to string and clean currency symbols, spaces
-        str_value = str(value).strip()
-        str_value = str_value.replace("Rp", "").replace("rp", "").replace(" ", "").replace(",", ".")
-
-        # Keep only digits and decimal point
-        cleaned = re.sub(r"[^0-9.]", "", str_value)
-
-        # If more than one dot, try to fix thousand separator like '9.50000'
-        if cleaned.count(".") > 1:
-            parts = cleaned.split(".")
-            # Join all except last as integer part
-            cleaned = "".join(parts[:-1]) + "." + parts[-1]
-
-        try:
-            return float(cleaned)
-        except ValueError as e:
-            raise ValueError(f"Could not convert cleaned string to float: original='{value}', cleaned='{cleaned}'")
-
     def extract_receipt_data(self, ground_truth):
         parsed = self.parse_ground_truth(ground_truth)
         menu_items = []
@@ -167,9 +141,8 @@ class DatasetReceipt:
             # Process each item
             for _, item in menu_df.iterrows():
                 try:
-                    # Clean numeric values
-                    quantity = self.clean_numeric_string(item.get(qty_col, 1))
-                    price = self.clean_numeric_string(item.get(price_col, 0))
+                    quantity = str(item.get(qty_col, ""))
+                    price = str(item.get(price_col, ""))
                     
                     menu_items.append({
                         "item_name": str(item.get(name_col, "")),
@@ -182,11 +155,11 @@ class DatasetReceipt:
 
         # Process total price
         try:
-            total_str = str(parsed.get("gt_parse", {}).get("total", {}).get("total_price", "0"))
-            total_price = self.clean_numeric_string(total_str)
+            total_price = str(parsed.get("gt_parse", {}).get("total", {}).get("total_price", "0"))
         except Exception as e:
             print(f"Error processing total price: {str(e)}")
-            total_price = 0.0
+            total_price = "0"
+
 
         return pd.DataFrame(menu_items), total_price
 
@@ -197,19 +170,10 @@ class DatasetReceipt:
         
         menu_df, total_price = self.extract_receipt_data(ground_truth)
         
-        # Convert menu_df to numeric numpy arrays
-        try:
-            quantities = menu_df['quantity'].astype(float).values
-            prices = menu_df['price'].astype(float).values
-        except Exception as e:
-            print(f"Error converting menu data to numeric: {str(e)}")
-            quantities = np.array([], dtype=np.float32)
-            prices = np.array([], dtype=np.float32)
-        
         return {
             "image": image,
-            "quantities": quantities.astype(np.float32),
-            "prices": prices.astype(np.float32),
-            "total_price": np.float32(total_price),
+            "quantities": menu_df['quantity'].values if 'quantity' in menu_df else np.array([]),
+            "prices": menu_df['price'].values if 'price' in menu_df else np.array([]),
+            "total_price": total_price,
             "item_names": menu_df['item_name'].values if 'item_name' in menu_df else np.array([])
         }
