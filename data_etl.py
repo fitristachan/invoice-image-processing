@@ -5,6 +5,7 @@ import cv2
 import json
 import albumentations as A
 import pandas as pd
+import re
 
 
 class DatasetReceipt:
@@ -119,35 +120,42 @@ class DatasetReceipt:
         image = self.augment(image=image)['image']
         return np.expand_dims(image, axis=0).astype(np.float32)
 
+    def clean_numeric_string(self, value):
+        """Robust cleaning of numeric strings with various formats"""
+        if pd.isna(value):
+            return 0.0
+            
+        if isinstance(value, (int, float)):
+            return float(value)
+            
+        # Convert to string if not already
+        str_value = str(value).strip()
+        
+        # Handle cases like '210.00 x' by splitting and taking first part
+        if 'x' in str_value:
+            str_value = str_value.split('x')[0].strip()
+        
+        # Remove all non-numeric characters except decimal point
+        cleaned = re.sub(r"[^\d.]", "", str_value)
+        
+        # Handle empty string after cleaning
+        if not cleaned:
+            return 0.0
+            
+        # Handle multiple decimal points
+        if cleaned.count('.') > 1:
+            parts = cleaned.split('.')
+            cleaned = f"{''.join(parts[:-1])}.{parts[-1]}"
+            
+        try:
+            return float(cleaned)
+        except ValueError:
+            return 0.0
+
     def extract_receipt_data(self, ground_truth):
         parsed = self.parse_ground_truth(ground_truth)
         menu_items = []
         total_price = 0.0
-
-        # Helper functions for robust parsing
-        def parse_quantity(qty_str):
-            """Handle various quantity formats (1X, 3pcs, etc.)"""
-            if not isinstance(qty_str, str):
-                return float(qty_str) if pd.notna(qty_str) else 1.0
-                
-            # Remove non-numeric characters
-            cleaned = ''.join(c for c in qty_str if c.isdigit() or c == '.')
-            return float(cleaned) if cleaned else 1.0
-
-        def parse_price(price_str):
-            """Handle various price formats (@22.000, 38,835, etc.)"""
-            if not isinstance(price_str, str):
-                return float(price_str) if pd.notna(price_str) else 0.0
-                
-            # Remove currency symbols, thousands separators
-            cleaned = price_str.replace('@', '').replace(',', '').strip()
-            
-            # Fix multiple decimal points (take last)
-            if cleaned.count('.') > 1:
-                parts = cleaned.split('.')
-                cleaned = f"{''.join(parts[:-1])}.{parts[-1]}"
-                
-            return float(cleaned) if cleaned else 0.0
 
         # Process menu data
         menu = parsed.get("gt_parse", {}).get("menu", [])
@@ -165,10 +173,14 @@ class DatasetReceipt:
             # Process each item
             for _, item in menu_df.iterrows():
                 try:
+                    # Clean numeric values
+                    quantity = self.clean_numeric_string(item.get(qty_col, 1))
+                    price = self.clean_numeric_string(item.get(price_col, 0))
+                    
                     menu_items.append({
                         "item_name": str(item.get(name_col, "")),
-                        "quantity": parse_quantity(item.get(qty_col, 1)),
-                        "price": parse_price(item.get(price_col, 0))
+                        "quantity": quantity,
+                        "price": price
                     })
                 except Exception as e:
                     print(f"Skipping malformed item: {item.to_dict()} - Error: {str(e)}")
@@ -177,7 +189,7 @@ class DatasetReceipt:
         # Process total price
         try:
             total_str = str(parsed.get("gt_parse", {}).get("total", {}).get("total_price", "0"))
-            total_price = parse_price(total_str)
+            total_price = self.clean_numeric_string(total_str)
         except Exception as e:
             print(f"Error processing total price: {str(e)}")
             total_price = 0.0
@@ -191,8 +203,19 @@ class DatasetReceipt:
         
         menu_df, total_price = self.extract_receipt_data(ground_truth)
         
+        # Convert menu_df to numeric numpy arrays
+        try:
+            quantities = menu_df['quantity'].astype(float).values
+            prices = menu_df['price'].astype(float).values
+        except Exception as e:
+            print(f"Error converting menu data to numeric: {str(e)}")
+            quantities = np.array([], dtype=np.float32)
+            prices = np.array([], dtype=np.float32)
+        
         return {
             "image": image,
-            "menu_df": menu_df,
-            "total_price": total_price
+            "quantities": quantities.astype(np.float32),
+            "prices": prices.astype(np.float32),
+            "total_price": np.float32(total_price),
+            "item_names": menu_df['item_name'].values if 'item_name' in menu_df else np.array([])
         }
