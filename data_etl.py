@@ -7,7 +7,6 @@ import albumentations as A
 import pandas as pd
 import re
 
-
 class DatasetReceipt:
     def __init__(self, dataset_name="naver-clova-ix/cord-v2", split="train"):
         self.dataset = load_dataset(dataset_name, split=split)
@@ -16,95 +15,12 @@ class DatasetReceipt:
             A.RandomBrightnessContrast(p=0.2),
             A.Rotate(limit=10, p=0.5)
         ])
+        # Deteksi tipe dataset berdasarkan nama
+        self.dataset_type = "donut" if "donut" in dataset_name.lower() else "cord"
 
     def __len__(self):
         return len(self.dataset)
      
-    @staticmethod
-    def _find_price_column(df):
-        """Find price column with priority and fallback logic"""
-        # Exact matches first
-        exact_matches = ['price', 'unit_price', 'unitprice']
-        for col in df.columns:
-            if col.lower() in exact_matches:
-                return col
-        
-        # Substring matches with priority
-        priority_patterns = [
-            'item_net_price',
-            'price',
-            'unit',
-            'amount',
-            'value'
-        ]
-        
-        for pattern in priority_patterns:
-            for col in df.columns:
-                if pattern in col.lower():
-                    return col
-        
-        # Fallback to first numeric column
-        numeric_cols = df.select_dtypes(include=['number']).columns
-        return numeric_cols[0] if len(numeric_cols) > 0 else None
-
-    @staticmethod
-    def _find_item_name_column(df):
-        """Find item name column with comprehensive matching"""
-        exact_matches = ['nm', 'name', 'item', 'description', 'menu_item']
-        for col in df.columns:
-            if col.lower() in exact_matches:
-                return col
-        
-        priority_patterns = [
-            'item_desc',
-            'item',
-            'name',
-            'desc',
-            'menu',
-            'product',
-            'title'
-        ]
-        
-        for pattern in priority_patterns:
-            for col in df.columns:
-                if pattern in col.lower():
-                    return col
-        
-        # Fallback to first string column
-        string_cols = df.select_dtypes(include=['object']).columns
-        return string_cols[0] if len(string_cols) > 0 else None
-
-    @staticmethod
-    def _find_quantity_column(df):
-        """Find quantity column with smart matching"""
-        exact_matches = ['cnt', 'qty', 'quantity', 'count']
-        for col in df.columns:
-            if col.lower() in exact_matches:
-                return col
-        
-        priority_patterns = [
-            'item_qty',
-            'qty',
-            'quant',
-            'cnt',
-            'count',
-            'amount'
-        ]
-        
-        for pattern in priority_patterns:
-            for col in df.columns:
-                if pattern in col.lower():
-                    return col
-        
-        # Fallback: look for columns with mostly integer values
-        for col in df.columns:
-            if pd.api.types.is_numeric_dtype(df[col]):
-                unique_vals = df[col].dropna().unique()
-                if all(x == int(x) for x in unique_vals):
-                    return col
-        
-        return None
-
     def parse_ground_truth(self, ground_truth):
         """Safely parse ground truth whether it's a string or dict"""
         if isinstance(ground_truth, str):
@@ -129,54 +45,58 @@ class DatasetReceipt:
         menu_items = []
         total_price = "0"
 
-        if "items" in gt:
+        if self.dataset_type == "cord":
+            # Format CORD: item_name, quantity, price
+            if "items" in gt:
                 items = gt["items"]
                 if isinstance(items, list):
-                    # Buat DataFrame dari items agar bisa pakai fungsi pencarian kolom
-                    items_df = pd.DataFrame(items)
-                    if not items_df.empty:
-                        items_df.columns = items_df.columns.str.lower()
+                    for item in items:
+                        try:
+                            menu_items.append({
+                                "item_name": str(item.get("item_name", item.get("item_desc", ""))),
+                                "quantity": str(item.get("quantity", item.get("item_qty", ""))),
+                                "price": str(item.get("price", item.get("item_net_price", "")))
+                            })
+                        except Exception as e:
+                            print(f"Skipping malformed item: {item} - Error: {str(e)}")
+                            continue
 
-                        name_col = self._find_item_name_column(items_df) or 'item_desc'
-                        qty_col = self._find_quantity_column(items_df) or 'item_qty'
-                        price_col = self._find_price_column(items_df) or 'item_net_price'
+                total_price = str(gt.get("summary", {}).get("total_net_worth", "0"))
 
-                        for _, item in items_df.iterrows():
+            elif "menu" in gt:  # Format alternatif CORD
+                menu = gt.get("menu", [])
+                if isinstance(menu, list):
+                    for item in menu:
+                        try:
+                            menu_items.append({
+                                "item_name": str(item.get("item_name", item.get("item_desc", ""))),
+                                "quantity": str(item.get("quantity", item.get("item_qty", ""))),
+                                "price": str(item.get("price", item.get("item_net_price", "")))
+                            })
+                        except Exception as e:
+                            print(f"Skipping malformed item: {item} - Error: {str(e)}")
+                            continue
+
+                total_price = str(gt.get("total", {}).get("total_price", "0"))
+        
+        else:  # Format Donut: item_desc, item_qty, item_net_price
+            if "gt_parse" in parsed:
+                gt_parse = parsed["gt_parse"]
+                if "line_items" in gt_parse:
+                    line_items = gt_parse["line_items"]
+                    if isinstance(line_items, list):
+                        for item in line_items:
                             try:
                                 menu_items.append({
-                                    "item_name": str(item.get(name_col, "")),
-                                    "quantity": str(item.get(qty_col, "")),
-                                    "price": str(item.get(price_col, ""))
+                                    "item_name": str(item.get("item_desc", item.get("description", ""))),
+                                    "quantity": str(item.get("item_qty", item.get("quantity", ""))),
+                                    "price": str(item.get("item_net_price", item.get("amount", "")))
                                 })
                             except Exception as e:
-                                print(f"Skipping malformed item: {item.to_dict()} - Error: {str(e)}")
+                                print(f"Skipping malformed item: {item} - Error: {str(e)}")
                                 continue
-
-                total_price = gt.get("summary", {}).get("total_net_worth", "0")
-
-        elif "menu" in gt:  # Format CORD
-            menu = gt.get("menu", [])
-            menu_df = pd.DataFrame(menu) if menu and isinstance(menu, list) else pd.DataFrame()
-
-            if not menu_df.empty:
-                menu_df.columns = menu_df.columns.str.lower()
-
-                name_col = self._find_item_name_column(menu_df) or 'item_name'
-                qty_col = self._find_quantity_column(menu_df) or 'quantity'
-                price_col = self._find_price_column(menu_df) or 'price'
-
-                for _, item in menu_df.iterrows():
-                    try:
-                        menu_items.append({
-                            "item_name": str(item.get(name_col, "")),
-                            "quantity": str(item.get(qty_col, "")),
-                            "price": str(item.get(price_col, ""))
-                        })
-                    except Exception as e:
-                        print(f"Skipping malformed item: {item.to_dict()} - Error: {str(e)}")
-                        continue
-
-            total_price = str(gt.get("total", {}).get("total_price", "0"))
+                
+                total_price = str(gt_parse.get("total", "0"))
 
         return pd.DataFrame(menu_items), total_price
 
