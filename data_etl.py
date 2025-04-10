@@ -122,44 +122,46 @@ class DatasetReceipt:
 
     def extract_receipt_data(self, ground_truth):
         parsed = self.parse_ground_truth(ground_truth)
+        gt = parsed.get("gt_parse", {})
         menu_items = []
-        total_price = 0.0
+        total_price = "0"
 
-        # Process menu data
-        menu = parsed.get("gt_parse", {}).get("menu", [])
-        menu_df = pd.DataFrame(menu) if menu and isinstance(menu, list) else pd.DataFrame()
-
-        if not menu_df.empty:
-            # Standardize column names
-            menu_df.columns = menu_df.columns.str.lower()
-            
-            # Find columns with fallbacks
-            name_col = self._find_item_name_column(menu_df) or 'item_name'
-            qty_col = self._find_quantity_column(menu_df) or 'quantity'
-            price_col = self._find_price_column(menu_df) or 'price'
-
-            # Process each item
-            for _, item in menu_df.iterrows():
-                try:
-                    quantity = str(item.get(qty_col, ""))
-                    price = str(item.get(price_col, ""))
-                    
+        # Deteksi apakah ini format Donut atau CORD
+        if "items" in gt:  # Format Donut
+            items = gt["items"]
+            if isinstance(items, list):
+                for item in items:
                     menu_items.append({
-                        "item_name": str(item.get(name_col, "")),
-                        "quantity": quantity,
-                        "price": price
+                        "item_name": item.get("item_desc", ""),
+                        "quantity": item.get("item_qty", ""),
+                        "price": item.get("item_net_price", "")
                     })
-                except Exception as e:
-                    print(f"Skipping malformed item: {item.to_dict()} - Error: {str(e)}")
-                    continue
+            
+            total_price = gt.get("summary", {}).get("total_net_worth", "0")
 
-        # Process total price
-        try:
-            total_price = str(parsed.get("gt_parse", {}).get("total", {}).get("total_price", "0"))
-        except Exception as e:
-            print(f"Error processing total price: {str(e)}")
-            total_price = "0"
+        elif "menu" in gt:  # Format CORD
+            menu = gt.get("menu", [])
+            menu_df = pd.DataFrame(menu) if menu and isinstance(menu, list) else pd.DataFrame()
 
+            if not menu_df.empty:
+                menu_df.columns = menu_df.columns.str.lower()
+
+                name_col = self._find_item_name_column(menu_df) or 'item_name'
+                qty_col = self._find_quantity_column(menu_df) or 'quantity'
+                price_col = self._find_price_column(menu_df) or 'price'
+
+                for _, item in menu_df.iterrows():
+                    try:
+                        menu_items.append({
+                            "item_name": str(item.get(name_col, "")),
+                            "quantity": str(item.get(qty_col, "")),
+                            "price": str(item.get(price_col, ""))
+                        })
+                    except Exception as e:
+                        print(f"Skipping malformed item: {item.to_dict()} - Error: {str(e)}")
+                        continue
+
+            total_price = str(gt.get("total", {}).get("total_price", "0"))
 
         return pd.DataFrame(menu_items), total_price
 
