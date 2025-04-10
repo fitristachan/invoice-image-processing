@@ -125,7 +125,7 @@ class DatasetReceipt:
 
     def extract_receipt_data(self, ground_truth):
         parsed = self.parse_ground_truth(ground_truth)
-        gt = parsed.get("gt_parse", {})
+        gt = parsed.get("gt_parse") or parsed.get("ground_truth") or parsed
         menu_items = []
         total_price = "0"
 
