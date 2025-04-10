@@ -84,7 +84,7 @@ class DatasetReceipt:
                 menu_items.append({
                     "item_name": str(item.get("item_desc", "")),
                     "quantity": str(item.get("item_qty", "1")),
-                    "price": str(item.get("item_net_price", "0")))
+                    "price": str(item.get("item_net_price", "0"))
                 })
         
         total_price = str(gt_parse.get("summary", {}).get("total_net_worth", "0"))
