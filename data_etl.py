@@ -28,13 +28,13 @@ class DatasetReceipt:
                 A.Resize(height=image_size[0], width=image_size[1]),
                 # A.HorizontalFlip(p=0.3),
                 A.RandomBrightnessContrast(p=0.2),
-                A.Rotate(limit=10, p=0.5),
-                A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+                # A.Rotate(limit=10, p=0.5),
+                # A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
             ])
         else:
             self.augment = A.Compose([
                 A.Resize(height=image_size[0], width=image_size[1]),
-                A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+                # A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
             ])
     
     def parse_ground_truth(self, ground_truth: Any) -> Dict[str, Any]:
