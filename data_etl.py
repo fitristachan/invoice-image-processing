@@ -31,6 +31,7 @@ class DatasetReceipt:
         
         # Substring matches with priority
         priority_patterns = [
+            'item_net_price',
             'price',
             'unit',
             'amount',
@@ -55,6 +56,7 @@ class DatasetReceipt:
                 return col
         
         priority_patterns = [
+            'item_desc',
             'item',
             'name',
             'desc',
@@ -81,6 +83,7 @@ class DatasetReceipt:
                 return col
         
         priority_patterns = [
+            'item_qty',
             'qty',
             'quant',
             'cnt',
@@ -126,18 +129,30 @@ class DatasetReceipt:
         menu_items = []
         total_price = "0"
 
-        # Deteksi apakah ini format Donut atau CORD
-        if "items" in gt:  # Format Donut
-            items = gt["items"]
-            if isinstance(items, list):
-                for item in items:
-                    menu_items.append({
-                        "item_name": item.get("item_desc", ""),
-                        "quantity": item.get("item_qty", ""),
-                        "price": item.get("item_net_price", "")
-                    })
-            
-            total_price = gt.get("summary", {}).get("total_net_worth", "0")
+        if "items" in gt:
+                items = gt["items"]
+                if isinstance(items, list):
+                    # Buat DataFrame dari items agar bisa pakai fungsi pencarian kolom
+                    items_df = pd.DataFrame(items)
+                    if not items_df.empty:
+                        items_df.columns = items_df.columns.str.lower()
+
+                        name_col = self._find_item_name_column(items_df) or 'item_desc'
+                        qty_col = self._find_quantity_column(items_df) or 'item_qty'
+                        price_col = self._find_price_column(items_df) or 'item_net_price'
+
+                        for _, item in items_df.iterrows():
+                            try:
+                                menu_items.append({
+                                    "item_name": str(item.get(name_col, "")),
+                                    "quantity": str(item.get(qty_col, "")),
+                                    "price": str(item.get(price_col, ""))
+                                })
+                            except Exception as e:
+                                print(f"Skipping malformed item: {item.to_dict()} - Error: {str(e)}")
+                                continue
+
+                total_price = gt.get("summary", {}).get("total_net_worth", "0")
 
         elif "menu" in gt:  # Format CORD
             menu = gt.get("menu", [])
