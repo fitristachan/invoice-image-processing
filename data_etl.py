@@ -8,19 +8,14 @@ import pandas as pd
 import re
 
 class DatasetReceipt:
-    def __init__(self, dataset_name="naver-clova-ix/cord-v2", split="train"):
-        self.dataset = load_dataset(dataset_name, split=split)
+    def __init__(self, dataset):
+        self.dataset = dataset
         self.augment = A.Compose([
             A.HorizontalFlip(p=0.5),
             A.RandomBrightnessContrast(p=0.2),
             A.Rotate(limit=10, p=0.5)
         ])
-        # Deteksi tipe dataset berdasarkan nama
-        self.dataset_type = "donut" if "donut" in dataset_name.lower() else "cord"
-
-    def __len__(self):
-        return len(self.dataset)
-     
+        
     def parse_ground_truth(self, ground_truth):
         """Safely parse ground truth whether it's a string or dict"""
         if isinstance(ground_truth, str):
@@ -39,14 +34,29 @@ class DatasetReceipt:
         image = self.augment(image=image)['image']
         return np.expand_dims(image, axis=0).astype(np.float32)
 
+    def determine_sample_type(self, sample):
+        """Determine if sample is from CORD or Donut based on its structure"""
+        parsed = self.parse_ground_truth(sample.get("ground_truth", {}))
+        gt = parsed.get("gt_parse") or parsed.get("ground_truth") or parsed
+        
+        # Cek struktur CORD
+        if "items" in gt or "menu" in gt:
+            return "cord"
+        # Cek struktur Donut
+        elif "line_items" in gt:
+            return "donut"
+        # Default ke CORD jika tidak bisa ditentukan
+        return "cord"
+
     def extract_receipt_data(self, ground_truth):
         parsed = self.parse_ground_truth(ground_truth)
         gt = parsed.get("gt_parse") or parsed.get("ground_truth") or parsed
         menu_items = []
         total_price = "0"
 
-        if self.dataset_type == "cord":
-            # Format CORD: item_name, quantity, price
+        sample_type = self.determine_sample_type({"ground_truth": ground_truth})
+
+        if sample_type == "cord":
             if "items" in gt:
                 items = gt["items"]
                 if isinstance(items, list):
@@ -63,7 +73,7 @@ class DatasetReceipt:
 
                 total_price = str(gt.get("summary", {}).get("total_net_worth", "0"))
 
-            elif "menu" in gt:  # Format alternatif CORD
+            elif "menu" in gt:
                 menu = gt.get("menu", [])
                 if isinstance(menu, list):
                     for item in menu:
@@ -79,7 +89,7 @@ class DatasetReceipt:
 
                 total_price = str(gt.get("total", {}).get("total_price", "0"))
         
-        else:  # Format Donut: item_desc, item_qty, item_net_price
+        else:  # donut
             if "gt_parse" in parsed:
                 gt_parse = parsed["gt_parse"]
                 if "line_items" in gt_parse:
@@ -100,6 +110,9 @@ class DatasetReceipt:
 
         return pd.DataFrame(menu_items), total_price
 
+    def __len__(self):
+        return len(self.dataset)
+        
     def __getitem__(self, idx):
         sample = self.dataset[idx]
         image = self.preprocess_image(sample["image"])
