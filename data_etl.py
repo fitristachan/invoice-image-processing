@@ -40,10 +40,10 @@ class DatasetReceipt:
         gt = parsed.get("gt_parse") or parsed.get("ground_truth") or parsed
         
         # Cek struktur CORD
-        if "items" in gt or "menu" in gt:
+        if "menu" in gt:
             return "cord"
         # Cek struktur Donut
-        elif "line_items" in gt:
+        elif "items" in gt:
             return "donut"
         # Default ke CORD jika tidak bisa ditentukan
         return "cord"
