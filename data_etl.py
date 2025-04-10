@@ -39,13 +39,10 @@ class DatasetReceipt:
         parsed = self.parse_ground_truth(sample.get("ground_truth", {}))
         gt = parsed.get("gt_parse") or parsed.get("ground_truth") or parsed
         
-        # Cek struktur CORD
-        if "menu" in gt:
-            return "cord"
-        # Cek struktur Donut
-        elif "items" in gt:
-            return "donut"
-        # Default ke CORD jika tidak bisa ditentukan
+        # Cek apakah ada field khusus Donut
+        if "gt_parse" in parsed and isinstance(parsed["gt_parse"], dict):
+            if "header" in parsed["gt_parse"] and "items" in parsed["gt_parse"]:
+                return "donut"
         return "cord"
 
     def extract_receipt_data(self, ground_truth):
@@ -57,6 +54,7 @@ class DatasetReceipt:
         sample_type = self.determine_sample_type({"ground_truth": ground_truth})
 
         if sample_type == "cord":
+            # Format CORD standar
             if "items" in gt:
                 items = gt["items"]
                 if isinstance(items, list):
@@ -68,12 +66,12 @@ class DatasetReceipt:
                                 "price": str(item.get("price", item.get("item_net_price", "")))
                             })
                         except Exception as e:
-                            print(f"Skipping malformed item: {item} - Error: {str(e)}")
+                            print(f"Skipping malformed CORD item: {item} - Error: {str(e)}")
                             continue
 
                 total_price = str(gt.get("summary", {}).get("total_net_worth", "0"))
 
-            elif "menu" in gt:
+            elif "menu" in gt:  # Format alternatif CORD
                 menu = gt.get("menu", [])
                 if isinstance(menu, list):
                     for item in menu:
@@ -84,29 +82,31 @@ class DatasetReceipt:
                                 "price": str(item.get("price", item.get("item_net_price", "")))
                             })
                         except Exception as e:
-                            print(f"Skipping malformed item: {item} - Error: {str(e)}")
+                            print(f"Skipping malformed CORD menu item: {item} - Error: {str(e)}")
                             continue
 
                 total_price = str(gt.get("total", {}).get("total_price", "0"))
         
-        else:  # donut
+        else:  # Format Donut
             if "gt_parse" in parsed:
                 gt_parse = parsed["gt_parse"]
-                if "line_items" in gt_parse:
-                    line_items = gt_parse["line_items"]
-                    if isinstance(line_items, list):
-                        for item in line_items:
+                if "items" in gt_parse:
+                    items = gt_parse["items"]
+                    if isinstance(items, list):
+                        for item in items:
                             try:
                                 menu_items.append({
-                                    "item_name": str(item.get("item_desc", item.get("description", ""))),
-                                    "quantity": str(item.get("item_qty", item.get("quantity", ""))),
-                                    "price": str(item.get("item_net_price", item.get("amount", "")))
+                                    "item_name": str(item.get("item_desc", "")),
+                                    "quantity": str(item.get("item_qty", "")),
+                                    "price": str(item.get("item_net_price", ""))
                                 })
                             except Exception as e:
-                                print(f"Skipping malformed item: {item} - Error: {str(e)}")
+                                print(f"Skipping malformed Donut item: {item} - Error: {str(e)}")
                                 continue
                 
-                total_price = str(gt_parse.get("total", "0"))
+                # Ambil total harga dari summary
+                if "summary" in gt_parse:
+                    total_price = str(gt_parse["summary"].get("total_net_worth", "0")).replace("$", "").replace(",", ".")
 
         return pd.DataFrame(menu_items), total_price
 
