@@ -26,7 +26,7 @@ class DatasetReceipt:
         if split == "train":
             self.augment = A.Compose([
                 A.Resize(height=image_size[0], width=image_size[1]),
-                A.HorizontalFlip(p=0.3),
+                # A.HorizontalFlip(p=0.3),
                 A.RandomBrightnessContrast(p=0.2),
                 A.Rotate(limit=10, p=0.5),
                 A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
