@@ -34,9 +34,15 @@ class DatasetReceipt:
     
     def preprocess_image(self, image: Image.Image) -> np.ndarray:
         """Convert PIL Image to numpy array and apply augmentations"""
-        image_np = np.array(image.convert("RGB"))
+        image_np = np.array(image.convert("RGB"))  # PIL Image to numpy (HWC)
         augmented = self.augment(image=image_np)
-        return augmented["image"]  # Keep HWC format (600, 600, 3)
+        augmented_image = augmented["image"]
+        
+        # Jika formatnya CHW (3, 600, 600), transpose ke HWC (600, 600, 3)
+        if augmented_image.shape[0] == 3:  # Cek apakah channel di depan
+            augmented_image = np.transpose(augmented_image, (1, 2, 0))  # CHW → HWC
+        
+        return augmented_image  # Pastikan shape (600, 600, 3)
     
     def extract_cord_data(self, gt: Dict[str, Any]) -> Tuple[pd.DataFrame, str]:
         menu_items = []
