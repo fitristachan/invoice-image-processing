@@ -16,13 +16,14 @@ class DatasetReceipt:
 
         if split == "train":
             self.augment = A.Compose([
-                A.Resize(height=image_size[0], width=image_size[1]),
+                A.Resize(height=600, width=600),
                 A.RandomBrightnessContrast(p=0.2),
-            ])
+            ], bbox_params=A.BboxParams(format='pascal_voc'))  # Pastikan tidak ada ToTensor() atau Normalize()
         else:
             self.augment = A.Compose([
-                A.Resize(height=image_size[0], width=image_size[1]),
-            ])
+                A.Resize(height=600, width=600),
+                A.RandomBrightnessContrast(p=0.2),
+            ], bbox_params=A.BboxParams(format='pascal_voc'))  # Pastikan tidak ada ToTensor() atau Normalize()
     
     def parse_ground_truth(self, ground_truth: Any) -> Dict[str, Any]:
         if isinstance(ground_truth, str):
@@ -34,15 +35,17 @@ class DatasetReceipt:
     
     def preprocess_image(self, image: Image.Image) -> np.ndarray:
         """Convert PIL Image to numpy array and apply augmentations"""
-        image_np = np.array(image.convert("RGB"))  # PIL Image to numpy (HWC)
+        image_np = np.array(image.convert("RGB"))  # Output: HWC (Height, Width, Channel)
+        
+        # Pastikan augmentasi tidak mengubah ke CHW
         augmented = self.augment(image=image_np)
         augmented_image = augmented["image"]
         
-        # Jika formatnya CHW (3, 600, 600), transpose ke HWC (600, 600, 3)
-        if augmented_image.shape[0] == 3:  # Cek apakah channel di depan
+        # Jika masih CHW (3, 600, 600), transpose ke HWC
+        if augmented_image.shape[0] == 3:
             augmented_image = np.transpose(augmented_image, (1, 2, 0))  # CHW → HWC
         
-        return augmented_image  # Pastikan shape (600, 600, 3)
+        return augmented_image  # Shape: (600, 600, 3)
     
     def extract_cord_data(self, gt: Dict[str, Any]) -> Tuple[pd.DataFrame, str]:
         menu_items = []
