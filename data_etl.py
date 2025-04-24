@@ -54,8 +54,8 @@ class DatasetReceipt:
         if isinstance(items, list):
             for item in items:
                 menu_items.append({
-                    "item_name": str(item.get("item_name", item.get("item_desc", ""))),
-                    "quantity": str(item.get("quantity", item.get("item_qty", "1"))),
+                    "item_name": str(item.get("nm", item.get("item_desc", ""))),
+                    "quantity": str(item.get("cnt", item.get("item_qty", "1"))),
                     "price": str(item.get("price", item.get("item_net_price", "0")))
                 })
         total_price = str(gt.get("summary", {}).get("total_net_worth", 
